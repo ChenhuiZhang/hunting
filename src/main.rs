@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy::{core::FixedTimestep, math::Vec3Swizzles};
-use bevy_rapier2d::na::Vector2;
+use bevy_rapier2d::na::{Complex, Unit, Vector2};
 use bevy_rapier2d::physics::{EventQueue, RigidBodyHandleComponent};
 use bevy_rapier2d::physics::{RapierConfiguration, RapierPhysicsPlugin};
 use bevy_rapier2d::rapier::{
@@ -71,7 +71,7 @@ fn setup(
     commands.spawn_batch(players);
     */
 
-    let body = RigidBodyBuilder::new_dynamic().lock_rotations();
+    let body = RigidBodyBuilder::new_dynamic().translation(20.0, 0.0).lock_rotations();
     let collider = ColliderBuilder::ball(40.0);
 
     let crusta = asset_server.load("res/icon.png");
@@ -79,7 +79,6 @@ fn setup(
         .spawn_bundle(SpriteBundle {
             material: materials.add(crusta.into()),
             transform: Transform {
-                translation: Vec3::new(20.0, 0.0, 0.0),
                 scale: Vec3::new(0.3, 0.3, 0.3),
                 ..Default::default()
             },
@@ -91,6 +90,7 @@ fn setup(
         .insert(Speed(Vec2::new(1.0, 1.0)))
         .insert(Monster);
 
+
     let body = RigidBodyBuilder::new_dynamic().translation(-450.0, -200.0);
     let collider = ColliderBuilder::ball(20.0);
 
@@ -99,7 +99,6 @@ fn setup(
         .spawn_bundle(SpriteBundle {
             material: materials.add(crusta2.into()),
             transform: Transform {
-                translation: Vec3::new(-450.0, -250.0, 0.0),
                 scale: Vec3::new(0.1, 0.1, 0.1),
                 ..Default::default()
             },
@@ -118,7 +117,24 @@ fn setup(
         .spawn_bundle(SpriteBundle {
             material: materials.add(crusta.into()),
             transform: Transform {
-                translation: Vec3::new(450.0, -250.0, 0.0),
+                scale: Vec3::new(0.1, 0.1, 0.1),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .insert_bundle((body, collider))
+        .insert(Speed(Vec2::new(1.0, 1.0)))
+        .insert(AI(0.1))
+        .insert(Hunter);
+
+    let body = RigidBodyBuilder::new_dynamic().translation(0.0, -250.0);
+    let collider = ColliderBuilder::ball(20.0);
+
+    let crusta = asset_server.load("res/ferris-miner-min.png");
+    commands
+        .spawn_bundle(SpriteBundle {
+            material: materials.add(crusta.into()),
+            transform: Transform {
                 scale: Vec3::new(0.1, 0.1, 0.1),
                 ..Default::default()
             },
@@ -151,20 +167,20 @@ fn position_system(
                 rb.set_linvel(m * time.delta_seconds() * 100.0, true);
             }
 
-            let pos = rb.position().clone();
+            let mut pos = rb.position().clone();
 
             if rb.position().translation.vector.x > 600.0
                 || rb.position().translation.vector.x < -600.0
                 || rb.position().translation.vector.y > 300.0
                 || rb.position().translation.vector.y < -300.0
             {
-                let rigid_body = RigidBodyBuilder::new(BodyStatus::Dynamic).rotation(0.0);
+                //let rigid_body = RigidBodyBuilder::new(BodyStatus::Dynamic).rotation(0.0);
                 rb.set_angvel(0.0, false);
-                pos.rotation = rigid_body.position().rotation;
-                rb.set_position(pos, false);
-                //pos.rotation = 0;
+                //pos.rotation = rigid_body.position().rotation;
+                //rb.set_position(pos, false);
+                pos.rotation = Unit::new_normalize(Complex::new(0.1, 0.0));
                 //println!("{}", rb.position().rotation);
-                //rb.set_position(*pos, false);
+                rb.set_position(pos, false);
             }
         }
     }
@@ -201,7 +217,7 @@ fn ai_system(
     if let Ok((_m, mut m_speed, m_trans)) = monster_query.single_mut() {
         println!("In AI we see monster in: {}", m_trans.translation);
 
-        m_speed.0 = 100.0
+        m_speed.0 = 10.0
             * Vec2::new(
                 thread_rng().gen_range(-1.0..1.0),
                 thread_rng().gen_range(-1.0..1.0),
@@ -217,7 +233,7 @@ fn ai_system(
             v.y += thread_rng().gen_range(-ai.0..ai.0);
 
             println!("AI v: {}", v);
-            speed.0 = 80.0 * v.xy().normalize();
+            speed.0 = 20.0 * v.xy().normalize();
         }
     }
 }
