@@ -136,7 +136,7 @@ fn setup(
     //.insert(ColliderBuilder::cuboid(1.0, 1.0))
     m.insert_bundle((body, collider))
         .insert(Speed(Vec2::new(0.0, 0.0)))
-        .insert(Helath(10000))
+        .insert(Helath(100))
         .insert(Name("Bevy"))
         .insert(Monster);
 
@@ -240,7 +240,8 @@ fn check_collision_events(
     events: Res<EventQueue>,
     mut bodies: ResMut<RigidBodySet>,
     mut colliders: ResMut<ColliderSet>,
-    query: Query<(&Name)>,
+    mut query: Query<(&Name, &mut Helath), Without<Hunter>>,
+    hquery: Query<(&Name, &Damage), Without<Monster>>,
 ) {
     while let Ok(contact_event) = events.contact_events.pop() {
         match contact_event {
@@ -264,12 +265,27 @@ fn check_collision_events(
                 //println!("{:?}", query.get_component::<Name>(e1).unwrap());
 
                 //let a = commands.entity(e1).get_mut::<Helath>().unwrap();
-                if let Ok(a) = query.get_component::<Name>(e0) {
-                    println!("{:?}", a);
-                    if let Ok(n) = query.get_component::<Name>(e1) {
-                        println!("{} hit monst with", n.0,);
+                if let Ok((mn, mut h)) = query.get_mut(e0) {
+                    println!("{:?} now at {}", mn, h.0);
+                    if let Ok((hn, d)) = hquery.get(e1) {
+                        println!("{} hit monst with {}", hn.0, d.0);
+                        h.0 -= d.0;
+                    }
+                    if h.0 == 0 {
+                        commands.entity(e0).despawn();
                     }
                 }
+
+                /*
+                if let Ok(a) = query.get_component::<Name>(e0) {
+                    println!("{:?} now at {}", a, h.0);
+                    if let Ok(n) = hquery.get_component::<Name>(e1) {
+                        let d = hquery.get_component::<Damage>(e1).unwrap();
+                        println!("{} hit monst with {}", n.0, d.0);
+                        h.0 -= d.0;
+                    }
+                }
+                */
 
                 println!("-----------------------------------------------")
                 //commands.entity(e1).despawn();
