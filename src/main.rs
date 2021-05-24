@@ -39,6 +39,9 @@ struct Monster;
 
 struct Hunter;
 
+#[derive(Debug)]
+struct GameState;
+
 fn spawn_hunter(
     mut commands: Commands,
     mut materials: ResMut<Assets<ColorMaterial>>,
@@ -123,11 +126,37 @@ fn movement_system(time: Res<Time>, mut query: Query<(&Speed, &mut Transform)>) 
     //println!("---------------------------")
 }
 
+fn game_ending(mut commands: Commands, mut event_reader: EventReader<GameState>) {
+    for event in event_reader.iter() {
+        println!("{:?}", event);
+
+        let mut m = commands.spawn_bundle(SpriteBundle {
+            transform: Transform {
+                scale: Vec3::new(0.3, 0.3, 0.3),
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+
+        let body = RigidBodyBuilder::new_dynamic()
+            .translation(0.0, 0.0)
+            .lock_rotations()
+            .user_data(m.id().to_bits() as u128);
+
+        let collider = ColliderBuilder::ball(10.0);
+        //.insert(RigidBodyBuilder::new_dynamic())
+        //.insert(ColliderBuilder::cuboid(1.0, 1.0))
+        m.insert_bundle((body, collider))
+            .insert(Speed(Vec2::new(0.0, 0.0)))
+            .insert(Name("DeadBevy"))
+            .insert(Monster);
+    }
+}
+
 fn position_system(
     mut commands: Commands,
     time: Res<Time>,
     mut bodies: ResMut<RigidBodySet>,
-
     query: Query<(&Speed, &RigidBodyHandleComponent)>,
 ) {
     for (player, rigid_body_component) in query.iter() {
@@ -208,6 +237,7 @@ fn check_collision_events(
     colliders: ResMut<ColliderSet>,
     asset_server: Res<AssetServer>,
     mut explosion_spawn_events: EventWriter<ExplosionSpawnEvent>,
+    mut game_ending_events: EventWriter<GameState>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut query: Query<(&Name, &mut Helath), Without<Hunter>>,
     hquery: Query<(&Name, &Damage), Without<Monster>>,
@@ -243,6 +273,8 @@ fn check_collision_events(
                             material: materials.add(asset_server.load("res/game_over.png").into()),
                             ..Default::default()
                         });
+
+                        game_ending_events.send(GameState {});
 
                         explosion_spawn_events.send(ExplosionSpawnEvent {
                             kind: ExplosionKind::ShipDead,
@@ -297,12 +329,14 @@ fn main() {
             ..Default::default()
         })
         .add_event::<ExplosionSpawnEvent>()
+        .add_event::<GameState>()
         .add_startup_system(setup.system())
         //.add_system(movement_system.system())
         .add_system(position_system.system())
         .add_system(check_collision_events.system())
         .add_system(handle_explosion.system())
         .add_system(spawn_explosion_event.system())
+        .add_system(game_ending.system())
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(FixedTimestep::step(TIME_STEP as f64))
