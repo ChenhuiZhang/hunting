@@ -11,31 +11,17 @@ use std::{borrow::Borrow, collections::HashMap};
 
 use rand::{thread_rng, Rng};
 
-const TIME_STEP: f32 = 1.0 / 2.0;
+mod components;
+mod explosion;
 
-struct MyEvent {
-    pub message: String,
-}
+use components::*;
+use explosion::*;
 
-struct EventTriggerState {
-    event_timer: Timer,
-}
-
-impl Default for EventTriggerState {
-    fn default() -> Self {
-        EventTriggerState {
-            event_timer: Timer::from_seconds(1.0, true),
-        }
-    }
-}
+const TIME_STEP: f32 = 1.0 / 1.0;
 
 #[derive(Debug)]
 struct Name(&'static str);
 
-struct Position {
-    x: i32,
-    y: i32,
-}
 #[derive(Debug)]
 struct Speed(Vec2);
 
@@ -61,14 +47,14 @@ fn spawn_hunter(
     let mut hunters = HashMap::new();
     hunters.insert("Alice", "res/ferris-miner-min.png");
     hunters.insert("Bob", "res/ferris-ninja-min.png");
-    hunters.insert("Chile", "res/ferris-viking-min.png");
+    hunters.insert("Charlie", "res/ferris-viking-min.png");
 
     for (name, logo) in hunters {
         let crusta = asset_server.load(logo);
 
         let mut h = commands.spawn_bundle(SpriteBundle {
             transform: Transform {
-                scale: Vec3::splat(1.0 / 10.0),
+                scale: Vec3::splat(1.0 / 9.0),
                 ..Default::default()
             },
             material: materials.add(crusta.into()),
@@ -89,7 +75,7 @@ fn spawn_hunter(
             Hunter,
             Name(name),
             Speed(Vec2::new(0.0, 0.0)),
-            AI(1.0),
+            AI(rand::thread_rng().gen_range(0.0..1.0)),
             Damage(20),
         ));
     }
@@ -101,20 +87,6 @@ fn setup(
     asset_server: Res<AssetServer>,
 ) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
-    /*
-    commands.spawn_bundle((Hunter, Name("Alice"), Helath(1000)));
-    commands.spawn_bundle((Hunter, Name("Bob"), Helath(1000)));
-    commands.spawn_bundle((Hunter, Name("Charlie"), Helath(1000)));
-    //commands.spawn_bundle((Monster, Name("Iceborne"), Helath(5000)));
-
-    let players = (0..=3).map(|_| {
-        let pos = Position { x: 0, y: 0 };
-
-        (Hunter, pos, Speed(5), Helath(1000), Damage(50), Score(0))
-    });
-
-    commands.spawn_batch(players);
-    */
 
     let crusta = asset_server.load("res/icon.png");
     let mut m = commands.spawn_bundle(SpriteBundle {
@@ -152,12 +124,14 @@ fn movement_system(time: Res<Time>, mut query: Query<(&Speed, &mut Transform)>) 
 }
 
 fn position_system(
+    mut commands: Commands,
     time: Res<Time>,
     mut bodies: ResMut<RigidBodySet>,
+
     query: Query<(&Speed, &RigidBodyHandleComponent)>,
 ) {
     for (player, rigid_body_component) in query.iter() {
-        let mut m = Vector2::new(player.0.x, player.0.y);
+        let m = Vector2::new(player.0.x, player.0.y);
         if let Some(rb) = bodies.get_mut(rigid_body_component.handle()) {
             if rb.angvel() != 0.0 {
             } else {
@@ -199,20 +173,12 @@ fn position_system(
     */
 }
 
-fn acc_movement_system(mut monster_query: Query<(&Monster, &mut Speed, &Transform)>) {
-    if let Ok((m, mut s, t)) = monster_query.single_mut() {
-        let mut rng = rand::thread_rng();
-
-        s.0 = 100.0 * Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0)).normalize();
-    }
-}
-
 fn ai_system(
     mut monster_query: Query<(&Monster, &mut Speed, &Transform), Without<Hunter>>,
     mut hunter_query: Query<(&Hunter, &mut Speed, &Transform, &AI), Without<Monster>>,
 ) {
     if let Ok((_m, mut m_speed, m_trans)) = monster_query.single_mut() {
-        //println!("In AI we see monster in: {}", m_trans.translation);
+        println!("In AI we see monster in: {}", m_trans.translation);
 
         m_speed.0 = 20.0
             * Vec2::new(
@@ -238,8 +204,11 @@ fn ai_system(
 fn check_collision_events(
     mut commands: Commands,
     events: Res<EventQueue>,
-    mut bodies: ResMut<RigidBodySet>,
-    mut colliders: ResMut<ColliderSet>,
+    bodies: ResMut<RigidBodySet>,
+    colliders: ResMut<ColliderSet>,
+    asset_server: Res<AssetServer>,
+    mut explosion_spawn_events: EventWriter<ExplosionSpawnEvent>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
     mut query: Query<(&Name, &mut Helath), Without<Hunter>>,
     hquery: Query<(&Name, &Damage), Without<Monster>>,
 ) {
@@ -253,10 +222,6 @@ fn check_collision_events(
                 let b1 = bodies.get(collider1.parent()).unwrap();
                 //let b1 = bodies.get_mut(collider1.parent()).unwrap();
                 //let b0 = bodies.get(collider0.parent()).unwrap();
-
-                println!("{} {}", b1.is_ccd_enabled(), b1.is_ccd_active());
-
-                //b1.enable_ccd(true);
 
                 let e0 = Entity::from_bits(b0.user_data as u64);
                 let e1 = Entity::from_bits(b1.user_data as u64);
@@ -273,6 +238,17 @@ fn check_collision_events(
                     }
                     if h.0 == 0 {
                         commands.entity(e0).despawn();
+
+                        commands.spawn_bundle(SpriteBundle {
+                            material: materials.add(asset_server.load("res/game_over.png").into()),
+                            ..Default::default()
+                        });
+
+                        explosion_spawn_events.send(ExplosionSpawnEvent {
+                            kind: ExplosionKind::ShipDead,
+                            x: b0.position().translation.x,
+                            y: b0.position().translation.y,
+                        });
                     }
                 }
 
@@ -320,10 +296,13 @@ fn main() {
             time_dependent_number_of_timesteps: true, //physic run at fixed 60Hz
             ..Default::default()
         })
+        .add_event::<ExplosionSpawnEvent>()
         .add_startup_system(setup.system())
         //.add_system(movement_system.system())
         .add_system(position_system.system())
         .add_system(check_collision_events.system())
+        .add_system(handle_explosion.system())
+        .add_system(spawn_explosion_event.system())
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(FixedTimestep::step(TIME_STEP as f64))
