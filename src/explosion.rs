@@ -14,7 +14,7 @@ pub fn spawn_explosion_event(
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     for event in event_reader.iter() {
-        let (texture_name, sound_name, start_scale, end_scale, duration) = match event.kind {
+        let (texture_name, _sound_name, start_scale, end_scale, duration) = match event.kind {
             ExplosionKind::ShipDead => (
                 "res/explosion01.png",
                 "res/Explosion_ship.mp3",

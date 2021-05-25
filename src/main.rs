@@ -7,10 +7,9 @@ use bevy_rapier2d::rapier::{
     dynamics::{RigidBodyBuilder, RigidBodySet},
     geometry::{ColliderBuilder, ColliderSet, ContactEvent},
 };
-use std::{borrow::Borrow, collections::HashMap};
+use std::collections::HashMap;
 
 use rand::{thread_rng, Rng};
-use std::{thread, time};
 
 mod components;
 mod explosion;
@@ -18,7 +17,7 @@ mod explosion;
 use components::*;
 use explosion::*;
 
-const TIME_STEP: f32 = 1.0 / 1.0;
+const TIME_STEP: f32 = 1.0 / 0.5;
 
 #[derive(Debug)]
 struct Name(&'static str);
@@ -122,7 +121,6 @@ fn spawn_hunter(
                         font: asset_server.load("FiraMono-Medium.ttf"),
                         font_size: 20.,
                         color: Color::WHITE,
-                        ..Default::default()
                     },
                     TextAlignment {
                         vertical: VerticalAlign::Center,
@@ -157,10 +155,6 @@ fn setup(
         ..Default::default()
     });
 
-    let ten_millis = time::Duration::from_millis(1000);
-
-    //thread::sleep(ten_millis);
-
     let crusta = asset_server.load("res/icon.png");
     let mut m = commands.spawn_bundle(SpriteBundle {
         material: materials.add(crusta.into()),
@@ -188,24 +182,8 @@ fn setup(
     spawn_hunter(commands, materials, asset_server);
 }
 
-//fn movement_system(time: Res<Time>, mut query: Query<(&Monster, &Speed, &mut Transform)>) {
-fn movement_system(time: Res<Time>, mut query: Query<(&Speed, &mut Transform)>) {
-    for (speed, mut trans) in query.iter_mut() {
-        trans.translation += speed.0.extend(0.0) * time.delta_seconds();
-    }
-    //println!("---------------------------")
-}
-
-fn game_ending(
-    mut commands: Commands,
-    mut event_reader: EventReader<GameState>,
-    asset_server: Res<AssetServer>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    query: Query<(&Name, &Score)>,
-) {
-    for event in event_reader.iter() {
-        println!("{:?}", event);
-
+fn game_ending(mut commands: Commands, mut event_reader: EventReader<GameState>) {
+    for _event in event_reader.iter() {
         let mut m = commands.spawn_bundle(SpriteBundle {
             transform: Transform {
                 scale: Vec3::new(0.3, 0.3, 0.3),
@@ -226,31 +204,10 @@ fn game_ending(
             .insert(Speed(Vec2::new(0.0, 0.0)))
             .insert(Name("DeadBevy"))
             .insert(Monster);
-
-        for (name, score) in query.iter() {
-            println!("{} score is {}", name.0, score.0);
-        }
-
-        /*
-        commands
-            .spawn_bundle(NodeBundle {
-                style: Style {
-                    size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    flex_direction: FlexDirection::ColumnReverse,
-                    ..Default::default()
-                },
-                material: materials.add(Color::GOLD.into()),
-                ..Default::default()
-            })
-             */
-        // .with_children(|parent| {
     }
 }
 
 fn position_system(
-    mut commands: Commands,
     time: Res<Time>,
     mut bodies: ResMut<RigidBodySet>,
     query: Query<(&Speed, &RigidBodyHandleComponent)>,
@@ -275,27 +232,10 @@ fn position_system(
                 //pos.rotation = rigid_body.position().rotation;
                 //rb.set_position(pos, false);
                 pos.rotation = Unit::new_normalize(Complex::new(0.1, 0.0));
-                //println!("{}", rb.position().rotation);
                 rb.set_position(pos, false);
             }
         }
     }
-
-    /*
-    for (speed, body_handle) in &mut query.iter() {
-        let body = bodies.get_mut(body_handle.handle()).unwrap();
-        let mut x = body.position().translation.vector.x;
-        let mut y = body.position().translation.vector.y;
-
-        //println!("{} -- {} with {}", x, y, speed.0);
-
-        let mut new_position = body.position().clone();
-        new_position.translation.vector.x += speed.0.x * time.delta_seconds();
-        new_position.translation.vector.y += speed.0.y * time.delta_seconds();
-        body.set_position(new_position, false);
-
-    }
-    */
 }
 
 fn ai_system(
@@ -303,7 +243,7 @@ fn ai_system(
     mut hunter_query: Query<(&Hunter, &mut Speed, &Transform, &AI), Without<Monster>>,
 ) {
     if let Ok((_m, mut m_speed, m_trans)) = monster_query.single_mut() {
-        println!("In AI we see monster in: {}", m_trans.translation);
+        //println!("In AI we see monster in: {}", m_trans.translation);
 
         m_speed.0 = 20.0
             * Vec2::new(
@@ -357,10 +297,8 @@ fn check_collision_events(
                 //println!("{:?}", query.get_component::<Name>(e1).unwrap());
 
                 //let a = commands.entity(e1).get_mut::<Helath>().unwrap();
-                if let Ok((mn, mut h)) = query.get_mut(e0) {
-                    println!("{:?} now at {}", mn, h.0);
+                if let Ok((_mn, mut h)) = query.get_mut(e0) {
                     if let Ok((hn, d, mut s)) = hquery.get_mut(e1) {
-                        println!("{} hit monst with {}", hn.0, d.0);
                         h.0 -= d.0;
                         s.0 += d.0;
 
@@ -388,30 +326,6 @@ fn check_collision_events(
                         });
                     }
                 }
-
-                /*
-                if let Ok(a) = query.get_component::<Name>(e0) {
-                    println!("{:?} now at {}", a, h.0);
-                    if let Ok(n) = hquery.get_component::<Name>(e1) {
-                        let d = hquery.get_component::<Damage>(e1).unwrap();
-                        println!("{} hit monst with {}", n.0, d.0);
-                        h.0 -= d.0;
-                    }
-                }
-                */
-
-                println!("-----------------------------------------------")
-                //commands.entity(e1).despawn();
-                //commands.entity(e2).despawn();
-
-                /*
-                //b0.apply_force(b1.position().translation, false);
-                //b1.apply_force(b0.position().translation, false);
-                b1.apply_force(Vector2::new(-1000.0, -1000.0), false);
-
-                //println!("{:?}", b0.position().translation);
-                println!("{:?}", b1.position().translation);
-                */
             }
             ContactEvent::Stopped(_, _) => {}
         }
@@ -423,7 +337,6 @@ fn score_system(
     mut query: Query<(&mut Text, &Player)>,
 ) {
     for event in event_reader.iter() {
-        println!("{:?}", event);
         for (mut text, player) in query.iter_mut() {
             if player.0 == event.player {
                 text.sections[0].value = format!("{:.2}", event.score);
@@ -450,7 +363,6 @@ fn main() {
         .add_event::<AttackEvent>()
         .add_event::<GameState>()
         .add_startup_system(setup.system())
-        //.add_system(movement_system.system())
         .add_system(position_system.system())
         .add_system(check_collision_events.system())
         .add_system(handle_explosion.system())
@@ -460,7 +372,6 @@ fn main() {
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(FixedTimestep::step(TIME_STEP as f64))
-                //.with_system(acc_movement_system.system())
                 .with_system(ai_system.system()),
         )
         .run()
