@@ -10,6 +10,7 @@ use bevy_rapier2d::rapier::{
 use std::{borrow::Borrow, collections::HashMap};
 
 use rand::{thread_rng, Rng};
+use std::{thread, time};
 
 mod components;
 mod explosion;
@@ -90,6 +91,21 @@ fn setup(
     asset_server: Res<AssetServer>,
 ) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+
+    let texture_handle = asset_server.load("res/pexels-francesco-ungaro-998641-min.png");
+    commands.spawn_bundle(SpriteBundle {
+        transform: Transform {
+            translation: Vec3::new(0.0, 0.0, 0.0),
+            //scale: Vec3::splat(0.1),
+            ..Default::default()
+        },
+        material: materials.add(texture_handle.into()),
+        ..Default::default()
+    });
+
+    let ten_millis = time::Duration::from_millis(1000);
+
+    //thread::sleep(ten_millis);
 
     let crusta = asset_server.load("res/icon.png");
     let mut m = commands.spawn_bundle(SpriteBundle {
@@ -270,7 +286,8 @@ fn check_collision_events(
                         commands.entity(e0).despawn();
 
                         commands.spawn_bundle(SpriteBundle {
-                            material: materials.add(asset_server.load("res/game_over.png").into()),
+                            material: materials
+                                .add(asset_server.load("res/game_over_transparent.png").into()),
                             ..Default::default()
                         });
 
