@@ -24,6 +24,9 @@ const TIME_STEP: f32 = 1.0 / 1.0;
 struct Name(&'static str);
 
 #[derive(Debug)]
+struct Player(&'static str);
+
+#[derive(Debug)]
 struct Speed(Vec2);
 
 #[derive(Debug)]
@@ -43,6 +46,12 @@ struct Hunter;
 #[derive(Debug)]
 struct GameState;
 
+#[derive(Debug)]
+struct AttackEvent {
+    score: u16,
+    player: &'static str,
+}
+
 fn spawn_hunter(
     mut commands: Commands,
     mut materials: ResMut<Assets<ColorMaterial>>,
@@ -52,6 +61,9 @@ fn spawn_hunter(
     hunters.insert("Alice", "res/ferris-miner-min.png");
     hunters.insert("Bob", "res/ferris-ninja-min.png");
     hunters.insert("Charlie", "res/ferris-viking-min.png");
+
+    let mut y = 320.0;
+    let mut top = 30.0;
 
     for (name, logo) in hunters {
         let crusta = asset_server.load(logo);
@@ -81,7 +93,48 @@ fn spawn_hunter(
             Speed(Vec2::new(0.0, 0.0)),
             AI(rand::thread_rng().gen_range(0.0..1.0)),
             Damage(20),
+            Score(0),
         ));
+
+        commands.spawn_bundle(SpriteBundle {
+            transform: Transform {
+                translation: Vec3::new(-600.0, y, 0.0),
+                scale: Vec3::splat(1.0 / 12.0),
+                ..Default::default()
+            },
+            material: materials.add(asset_server.load(logo).into()),
+            ..Default::default()
+        });
+        commands
+            .spawn_bundle(TextBundle {
+                style: Style {
+                    position_type: PositionType::Absolute,
+                    position: Rect {
+                        top: Val::Px(top),
+                        left: Val::Px(80.0),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                text: Text::with_section(
+                    "0",
+                    TextStyle {
+                        font: asset_server.load("FiraMono-Medium.ttf"),
+                        font_size: 20.,
+                        color: Color::WHITE,
+                        ..Default::default()
+                    },
+                    TextAlignment {
+                        vertical: VerticalAlign::Center,
+                        horizontal: HorizontalAlign::Center,
+                    },
+                ),
+                ..Default::default()
+            })
+            .insert(Player(name));
+
+        y -= 50.0;
+        top += 50.0;
     }
 }
 
@@ -91,6 +144,7 @@ fn setup(
     asset_server: Res<AssetServer>,
 ) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+    commands.spawn_bundle(UiCameraBundle::default());
 
     let texture_handle = asset_server.load("res/pexels-francesco-ungaro-998641-min.png");
     commands.spawn_bundle(SpriteBundle {
@@ -142,7 +196,13 @@ fn movement_system(time: Res<Time>, mut query: Query<(&Speed, &mut Transform)>) 
     //println!("---------------------------")
 }
 
-fn game_ending(mut commands: Commands, mut event_reader: EventReader<GameState>) {
+fn game_ending(
+    mut commands: Commands,
+    mut event_reader: EventReader<GameState>,
+    asset_server: Res<AssetServer>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    query: Query<(&Name, &Score)>,
+) {
     for event in event_reader.iter() {
         println!("{:?}", event);
 
@@ -166,6 +226,26 @@ fn game_ending(mut commands: Commands, mut event_reader: EventReader<GameState>)
             .insert(Speed(Vec2::new(0.0, 0.0)))
             .insert(Name("DeadBevy"))
             .insert(Monster);
+
+        for (name, score) in query.iter() {
+            println!("{} score is {}", name.0, score.0);
+        }
+
+        /*
+        commands
+            .spawn_bundle(NodeBundle {
+                style: Style {
+                    size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    flex_direction: FlexDirection::ColumnReverse,
+                    ..Default::default()
+                },
+                material: materials.add(Color::GOLD.into()),
+                ..Default::default()
+            })
+             */
+        // .with_children(|parent| {
     }
 }
 
@@ -253,10 +333,11 @@ fn check_collision_events(
     colliders: ResMut<ColliderSet>,
     asset_server: Res<AssetServer>,
     mut explosion_spawn_events: EventWriter<ExplosionSpawnEvent>,
+    mut attack_events: EventWriter<AttackEvent>,
     mut game_ending_events: EventWriter<GameState>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     mut query: Query<(&Name, &mut Helath), Without<Hunter>>,
-    hquery: Query<(&Name, &Damage), Without<Monster>>,
+    mut hquery: Query<(&Name, &Damage, &mut Score), Without<Monster>>,
 ) {
     while let Ok(contact_event) = events.contact_events.pop() {
         match contact_event {
@@ -278,10 +359,17 @@ fn check_collision_events(
                 //let a = commands.entity(e1).get_mut::<Helath>().unwrap();
                 if let Ok((mn, mut h)) = query.get_mut(e0) {
                     println!("{:?} now at {}", mn, h.0);
-                    if let Ok((hn, d)) = hquery.get(e1) {
+                    if let Ok((hn, d, mut s)) = hquery.get_mut(e1) {
                         println!("{} hit monst with {}", hn.0, d.0);
                         h.0 -= d.0;
+                        s.0 += d.0;
+
+                        attack_events.send(AttackEvent {
+                            score: s.0,
+                            player: hn.0,
+                        });
                     }
+
                     if h.0 == 0 {
                         commands.entity(e0).despawn();
 
@@ -330,6 +418,19 @@ fn check_collision_events(
     }
 }
 
+fn score_system(
+    mut event_reader: EventReader<AttackEvent>,
+    mut query: Query<(&mut Text, &Player)>,
+) {
+    for event in event_reader.iter() {
+        println!("{:?}", event);
+        for (mut text, player) in query.iter_mut() {
+            if player.0 == event.player {
+                text.sections[0].value = format!("{:.2}", event.score);
+            }
+        }
+    }
+}
 fn main() {
     App::build()
         .add_plugins(DefaultPlugins)
@@ -346,6 +447,7 @@ fn main() {
             ..Default::default()
         })
         .add_event::<ExplosionSpawnEvent>()
+        .add_event::<AttackEvent>()
         .add_event::<GameState>()
         .add_startup_system(setup.system())
         //.add_system(movement_system.system())
@@ -354,6 +456,7 @@ fn main() {
         .add_system(handle_explosion.system())
         .add_system(spawn_explosion_event.system())
         .add_system(game_ending.system())
+        .add_system(score_system.system())
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(FixedTimestep::step(TIME_STEP as f64))
